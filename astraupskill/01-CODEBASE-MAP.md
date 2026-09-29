@@ -1,0 +1,7 @@
+# Map
+
+Start at `src/services/dealRegistrationService.ts`. `findVisibleById` runs before `$transaction`; this pre-read supplies current status and access context. `assertDealTransitionAllowed` in `src/domain/dealRegistration.ts` checks the adjacency map, then calls permission logic based on `session.role`. Inside the transaction, `updateStatus` and `createApproval` receive the same client, followed by `recordAuditEvent`. Only APPROVED schedules the leaderboard refresh job. The lab fixture records names and client identity, making the boundary inspectable.
+
+The API route is outside this harness. Its job is input parsing and service delegation; the service owns workflow correctness.
+
+The repository is `src/repositories/dealRepository.ts`, not a second transition service. Its visibility query combines the deal id with `buildOwnedRecordVisibilityFilter`. Its update query, however, selects only by id; it does not include the previously observed status. This distinction matters when two callers read the same status before either writes. The harness replaces repository operations, so visibility SQL and update predicates are inspected source facts, not executed database evidence. `src/lib/time.ts` formats the quarter for the queued job; that real helper is loaded. `src/lib/errors.ts` supplies statusCode-bearing errors. Follow an id across the service, approval history and job payload to understand how these records relate without confusing their different purposes.

@@ -1,0 +1,14 @@
+import { Prisma, PrismaClient } from "@prisma/client";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __prisma: PrismaClient | undefined;
+}
+
+export const db = global.__prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  global.__prisma = db;
+}
+
+export type DbExecutor = PrismaClient | Prisma.TransactionClient;

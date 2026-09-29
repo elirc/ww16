@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PLATFORM_ADMIN
+  CHANNEL_MANAGER
+  SALES_REP
+  FINANCE_MANAGER
+  PARTNER_ADMIN
+  PARTNER_SELLER
+}
+
+enum PartnerTier {
+  REGISTERED
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum AgreementStatus {
+  PENDING_SIGNATURE
+  ACTIVE
+  EXPIRED
+}
+
+enum CertificationStatus {
+  ACTIVE
+  EXPIRED
+}
+
+enum DealStatus {
+  DRAFT
+  SUBMITTED
+  SALES_APPROVED
+  APPROVED
+  REJECTED
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum MdfRequestStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+enum JobType {
+  LEADERBOARD_REFRESH
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model User {
+  id                      String              @id
+  email                   String              @unique
+  name                    String
+  role                    UserRole
+  partnerOrgId            String?
+  partnerOrg              PartnerOrg?         @relation(fields: [partnerOrgId], references: [id])
+  createdDeals            DealRegistration[]  @relation("DealCreatedBy")
+  assignedSalesDeals      DealRegistration[]  @relation("AssignedSalesRep")
+  assignedChannelDeals    DealRegistration[]  @relation("AssignedChannelManager")
+  submittedMdfRequests    MdfRequest[]        @relation("MdfSubmittedBy")
+  reimbursementsProcessed MdfReimbursement[]  @relation("MdfReimbursedBy")
+  dealApprovals           DealApproval[]
+  auditLogs               AuditLog[]
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+}
+
+model PartnerOrg {
+  id                   String                @id
+  name                 String
+  slug                 String                @unique
+  tier                 PartnerTier
+  agreementStatus      AgreementStatus
+  portalAccessEnabled  Boolean               @default(true)
+  users                User[]
+  agreements           PartnerAgreement[]
+  certificationRecords CertificationRecord[]
+  deals                DealRegistration[]
+  mdfRequests          MdfRequest[]
+  leaderboardSnapshots LeaderboardSnapshot[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+}
+
+model PartnerAgreement {
+  id              String          @id
+  partnerOrgId    String
+  partnerOrg      PartnerOrg      @relation(fields: [partnerOrgId], references: [id])
+  status          AgreementStatus
+  effectiveDate   DateTime
+  renewalDate     DateTime
+  commercialTerms Json
+  createdAt       DateTime        @default(now())
+}
+
+model CertificationDefinition {
+  id               String                @id
+  name             String
+  requiredForTier  PartnerTier?
+  expiresInMonths  Int
+  isActive         Boolean               @default(true)
+  records          CertificationRecord[]
+  createdAt        DateTime              @default(now())
+}
+
+model CertificationRecord {
+  id              String               @id
+  partnerOrgId    String
+  partnerOrg      PartnerOrg           @relation(fields: [partnerOrgId], references: [id])
+  definitionId    String
+  definition      CertificationDefinition @relation(fields: [definitionId], references: [id])
+  status          CertificationStatus
+  achievedAt      DateTime
+  expiresAt       DateTime
+  recordedByUserId String
+  createdAt       DateTime             @default(now())
+}
+
+model DealRegistration {
+  id                String         @id
+  partnerOrgId      String
+  partnerOrg        PartnerOrg     @relation(fields: [partnerOrgId], references: [id])
+  createdByUserId   String
+  createdBy         User           @relation("DealCreatedBy", fields: [createdByUserId], references: [id])
+  assignedSalesRepId String?
+  assignedSalesRep  User?          @relation("AssignedSalesRep", fields: [assignedSalesRepId], references: [id])
+  channelManagerId  String?
+  channelManager    User?          @relation("AssignedChannelManager", fields: [channelManagerId], references: [id])
+  status            DealStatus
+  endCustomerName   String
+  projectedArr      Decimal        @db.Decimal(12, 2)
+  closeDate         DateTime
+  notes             String?
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+  closedAt          DateTime?
+  rejectionReason   String?
+  approvals         DealApproval[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+model DealApproval {
+  id          String     @id
+  dealId      String
+  deal        DealRegistration @relation(fields: [dealId], references: [id])
+  actorUserId String
+  actor       User       @relation(fields: [actorUserId], references: [id])
+  fromStatus  DealStatus
+  toStatus    DealStatus
+  note        String?
+  createdAt   DateTime   @default(now())
+}
+
+model MdfRequest {
+  id               String            @id
+  partnerOrgId     String
+  partnerOrg       PartnerOrg        @relation(fields: [partnerOrgId], references: [id])
+  submittedByUserId String
+  submittedBy      User              @relation("MdfSubmittedBy", fields: [submittedByUserId], references: [id])
+  campaignName     String
+  amountRequested  Decimal           @db.Decimal(12, 2)
+  plannedStartDate DateTime
+  plannedEndDate   DateTime
+  status           MdfRequestStatus
+  approvedAmount   Decimal?          @db.Decimal(12, 2)
+  submittedAt      DateTime?
+  decidedAt        DateTime?
+  rejectionReason  String?
+  reimbursement    MdfReimbursement?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model MdfReimbursement {
+  id                String      @id
+  requestId         String      @unique
+  request           MdfRequest  @relation(fields: [requestId], references: [id])
+  reimbursedByUserId String
+  reimbursedBy      User        @relation("MdfReimbursedBy", fields: [reimbursedByUserId], references: [id])
+  amount            Decimal     @db.Decimal(12, 2)
+  receiptUrl        String
+  reimbursedAt      DateTime
+  createdAt         DateTime    @default(now())
+}
+
+model LeaderboardSnapshot {
+  id                String      @id
+  quarter           String
+  partnerOrgId      String
+  partnerOrg        PartnerOrg  @relation(fields: [partnerOrgId], references: [id])
+  sourcedJobId      String?
+  approvedDealCount Int
+  approvedDealArr   Decimal     @db.Decimal(12, 2)
+  reimbursedMdf     Decimal     @db.Decimal(12, 2)
+  certificationCount Int
+  score             Decimal     @db.Decimal(12, 2)
+  createdAt         DateTime    @default(now())
+
+  @@unique([quarter, partnerOrgId])
+}
+
+model AuditLog {
+  id         String   @id
+  entityType String
+  entityId   String
+  action     String
+  actorUserId String
+  actor      User     @relation(fields: [actorUserId], references: [id])
+  actorRole  UserRole
+  metadata   Json
+  createdAt  DateTime @default(now())
+}
+
+model BackgroundJob {
+  id            String    @id
+  type          JobType
+  status        JobStatus
+  payload       Json
+  availableAt   DateTime
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  failureReason String?
+  createdAt     DateTime  @default(now())
+}

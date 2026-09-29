@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "executedTests": 5,
+  "checks": [
+    {
+      "project": "_Organized Desktop/05 Numbered Experiments/ww16",
+      "id": "d851d9ba11a1",
+      "command": [
+        "node",
+        "--experimental-vm-modules",
+        "--test",
+        "tests/deal-transition-lab.test.mjs"
+      ],
+      "cwd": "C:\\Users\\Owner\\Desktop\\AstraOrganized2\\astra-remaining-improvements\\stage\\d851d9ba11a1",
+      "environmentOverrides": {},
+      "startedAt": "2026-09-22T03:17:24.776052+00:00",
+      "status": "complete",
+      "log": "crud-b05-astra-runtime.log",
+      "pid": 32680,
+      "exitCode": 0,
+      "passed": true,
+      "finishedAt": "2026-09-22T03:17:30.715015+00:00",
+      "elapsedSeconds": 5.94
+    }
+  ],
+  "limits": [
+    "Five cases execute actual service, transition policy, role permissions, error classes and quarter helper. Transaction/repository/audit/job and unused ZodError adapters are explicit.",
+    "No Next, native database, rollback, worker or concurrent transition execution. Current deal is read before transaction and update does not compare prior status; shared client assertions do not prove isolation. No production behavior changed."
+  ]
+}
