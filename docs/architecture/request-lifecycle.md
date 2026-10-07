@@ -31,3 +31,22 @@ Request: Sales rep attempts to process background jobs without permission
 4. `src/services/backgroundJobService.ts` — not reached because the permission rejection happens first.
 5. `src/repositories/backgroundJobRepository.ts` — not reached because the request never enters the service layer.
 6. Returns `403` with `{ error, code: "FORBIDDEN", details: null }`
+
+## Ordering and failure details for the deal transition
+
+- `transitionDeal` reads the deal **before** opening the transaction (`dealRegistrationService.ts:91` vs `:99`). A concurrent approver can change the status between that read and the update, and the update does not re-check the status (`dealRepository.ts:134`).
+- Policy failures (409 for an illegal edge, 403 for a missing permission) happen before the transaction opens, so they write nothing.
+- Failures inside the transaction (update, approval, audit, job) reject the `$transaction` callback. Prisma then rolls back the whole unit. This has not been executed against a database in this repo. The runtime lab under `astraupskill/` uses a non-rolling-back double.
+
+## Error envelope
+
+Every route uses `createAuthedRoute`, so every failure has the shape `{ error, code, details }` (`src/lib/http/route-handlers.ts:44-51`):
+
+| Thrown | Status | `code` |
+|---|---|---|
+| `UnauthorizedError` (unknown demo user) | 401 | `UNAUTHORIZED` |
+| `ForbiddenError` | 403 | `FORBIDDEN` |
+| `NotFoundError` | 404 | `NOT_FOUND` |
+| `ConflictError` | 409 | `CONFLICT` |
+| `ZodError` | 400 | `VALIDATION_ERROR` (`details` = `flatten()`) |
+| anything else, including Prisma errors and malformed JSON | 500 | `INTERNAL_SERVER_ERROR` |

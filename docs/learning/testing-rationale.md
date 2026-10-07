@@ -41,3 +41,16 @@ A more thorough production suite would also test:
 - repository calls with seeded database data to prove cross-partner rows are not returned
 - partner create flows rejecting tampered `partnerOrgId` payloads in `src/services/dealRegistrationService.ts` and `src/services/mdfService.ts`
 - future tenant-aware filters if the app is later extended to full multi-tenancy
+
+## `tests/deal-transition-lab.test.mjs` — runtime lab for `transitionDeal`
+
+This file belongs to the `astraupskill/` course and runs with `node --experimental-vm-modules --test`, not Vitest. It loads the real `src/services/dealRegistrationService.ts` through `tests/helpers/load-typescript.mjs`. The domain policy, permission matrix, errors, and `currentQuarterLabel` execute for real. The database, repositories, audit logger, and job repository are recording doubles that assert every write receives the same transaction client.
+
+It protects:
+
+- the exact approval-history fields and audit action for sales approval (lines 20-23)
+- that `APPROVED` alone queues a leaderboard job with source identity and a `YYYY-QN` quarter (24-27)
+- that the 403, 409, and 404 refusals all happen before the transaction (28-30)
+- that update and audit failures stop later writes and propagate the original error (31-36)
+
+It cannot protect against the stale-read race (`dealRepository.updateStatus` filters by `id` only), tenant visibility (the `findVisibleById` double ignores the session), or rollback. Those need a real PostgreSQL test with two connections.

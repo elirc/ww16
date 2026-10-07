@@ -64,3 +64,24 @@ erDiagram
 - `DealApproval` is deliberately separate from `DealRegistration` status fields so reviewers can reconstruct the approval path even after the current status changes.
 - `MdfReimbursement` is a one-to-one child of `MdfRequest` so finance cannot accidentally create multiple payouts for the same request.
 - `LeaderboardSnapshot` is a derived table, not a source-of-truth table. Live computation still exists in `src/services/reportingService.ts`, and the snapshot exists to support async refresh.
+
+## Deal workflow as implemented
+
+`src/domain/dealRegistration.ts:12-20` is the only source of legal transitions:
+
+| From | To | Permission |
+|---|---|---|
+| DRAFT | SUBMITTED | `deal:submit` |
+| SUBMITTED | SALES_APPROVED, REJECTED | `deal:approve_sales` |
+| SALES_APPROVED | APPROVED, REJECTED | `deal:approve_channel` |
+| APPROVED | CLOSED_WON, CLOSED_LOST | `deal:close` |
+| REJECTED, CLOSED_WON, CLOSED_LOST | — | terminal |
+
+`dealRepository.updateStatus` (`src/repositories/dealRepository.ts:130-146`) stamps `submittedAt`, `approvedAt`, or `closedAt` for the corresponding targets, and writes `rejectionReason` only for `REJECTED`. It clears it (sets `null`) on every other transition. Each transition also appends a `DealApproval` row carrying `fromStatus`, `toStatus`, `actorUserId`, and `note` (`dealRegistrationService.ts:109-119`). That table, not `rejectionReason`, is the durable history.
+
+Only the `→ APPROVED` edge queues a `LEADERBOARD_REFRESH` background job (lines 135-150). The job is processed later by `backgroundJobService.processDueJobs` (`src/services/backgroundJobService.ts:12-43`), which marks it `RUNNING`, then `SUCCEEDED` or `FAILED`.
+
+## Exercise
+
+**Goal:** List the timestamps set on a deal that goes DRAFT → SUBMITTED → SALES_APPROVED → APPROVED → CLOSED_WON.
+**Check:** `submittedAt` (first edge), nothing for SALES_APPROVED, `approvedAt` (third edge), and `closedAt` (fourth). Each assignment uses `undefined` for the other fields, so earlier timestamps are preserved (lines 137-142).

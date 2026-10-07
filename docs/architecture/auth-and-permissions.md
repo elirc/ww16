@@ -89,3 +89,23 @@ To add real multi-tenancy later without a rewrite:
 5. Update audit and job creation in `src/lib/audit/auditLogger.ts` and `src/repositories/backgroundJobRepository.ts` so async work is tenant-bound too.
 
 If you skip step 4, you would have a codebase that *looks* tenant-aware in auth but still leaks data at the query layer.
+
+## Exact locations
+
+- `getRequestSession()`: `src/lib/auth/session.ts:13-29`. The default user `demo-channel-manager` is set at line 11 and applied at line 14.
+- `createAuthedRoute()`: `src/lib/http/route-handlers.ts:28-54`. The optional permission check is at lines 36-38, and error serialization at 42-51.
+- `rolePermissionMatrix`: `src/lib/auth/permissions.ts:30-71`. `isInternalRole()` is at 88-90.
+- Visibility helpers: `src/lib/auth/visibility.ts:13-35`.
+- Deal edge permissions: `src/domain/dealRegistration.ts:31-53`.
+
+## Where the boundaries leak
+
+1. **Missing header means channel manager.** With no `x-demo-user-id`, every request runs as an internal `CHANNEL_MANAGER` (`session.ts:11,14`). Internal roles get an empty visibility filter (`visibility.ts:20-22, 29-31`), so an anonymous caller can read every partner's deals and MDF requests. The fallback is convenient for a demo, and it must be the first thing removed before deployment.
+2. **Capability without assignment.** `assertDealTransitionAllowed` checks only the role. `DealRegistration.assignedSalesRepId` and `channelManagerId` are stored (`src/repositories/dealRepository.ts:111-112`), but no policy reads them, so any `SALES_REP` can sales-approve or close any deal.
+3. **Write paths trust an earlier scoped read.** `dealRepository.updateStatus` updates `where: { id }` (line 134), with neither the visibility filter nor the expected status. It is safe today only because `transitionDeal` calls `findVisibleById` first. It is also the source of the stale-approval race described in `astraupskill/02-CONCEPTS.md`.
+4. **Job processing is double-guarded but not atomic.** Only `PLATFORM_ADMIN` and `FINANCE_MANAGER` hold `jobs:process`. Even so, two authorized operators calling `POST /api/jobs/process` concurrently can claim the same job, because `markRunning` updates by id without a `status: "QUEUED"` predicate (`src/repositories/backgroundJobRepository.ts:39-47`).
+
+## Exercise
+
+**Goal:** Show that an unauthenticated request can list all deals.
+**Check:** Trace `GET /api/deals` with no headers. `getRequestSession` resolves `demo-channel-manager` (if that user exists in the seeded database), `CHANNEL_MANAGER` holds `deal:read` (`permissions.ts:35`), and `buildOwnedRecordVisibilityFilter` returns `{}` for internal roles. The query has no `partnerOrgId` filter. Name the line to change so that a missing header yields 401.

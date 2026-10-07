@@ -1,9 +1,41 @@
 # Verification
 
-The production source is `src/services/dealRegistrationService.ts`; exact original bytes are in `snapshots/dealRegistrationService.ts.original.txt`. The local test is `tests/deal-transition-lab.test.mjs`. The captured `crud-b05-astra-runtime` test covers five cases: sales approval, channel approval job, combined refusals, update failure and audit failure. The test uses explicit repository, audit, job, and database adapters. It does not execute Next.js, Prisma, rollback, or concurrent writers.
+## 1. Recorded by the original Astra run (not re-run for this revision)
 
-Run `node --experimental-vm-modules --test tests/deal-transition-lab.test.mjs` from this project. Five test cases contain multiple scenarios: sales success, channel success with job, a combined refusal matrix, update failure and audit failure. The refusal matrix itself checks role denial, illegal adjacency and missing deal. Real authorization, workflow rules, error classes and quarter formatting are loaded, with an unused ZodError export adapted at the external package boundary. Repository, transaction, audit and job persistence are explicit adapters. The assertions verify payload fields, ordering, error identity and reuse of the supplied client. They do not execute visibility queries or status-update SQL. Source inspection found the update selects only by id, while visibility and state are read earlier. Full typechecking, provider isolation, rollback, concurrent approval and worker execution remain outside the captured check.
+[evidence/results.json](evidence/results.json) records:
 
-## Astra execution evidence
+- command `node --experimental-vm-modules --test tests/deal-transition-lab.test.mjs`
+- `exitCode: 0`, `passed: true`, `executedTests: 5`, elapsed 5.94 s, started 2026-09-22T03:17:24Z
+- `cwd` was a staging directory on the author's machine (`...\stage\d851d9ba11a1`), not this clone
 
-The captured focused production-source suite executed 5 tests: all passed, zero failed and zero skipped. Read the [captured output](evidence/crud-b05-astra-runtime.log) and [exact command and limits](evidence/results.json). Earlier check records remain preserved in the workspace.
+The log file it names, `crud-b05-astra-runtime.log`, was **not committed**. Only `results.json` is tracked, so the earlier "captured output" link does not resolve here.
+
+Recorded limits, still accurate:
+
+1. The five cases execute the real service, transition policy, role permissions, error classes, and quarter helper. The transaction, repositories, audit, job, and the unused `ZodError` are explicit doubles.
+2. No Next.js, native database, rollback, worker, or concurrent transition was executed.
+3. The current deal is read before the transaction, and the update does not compare the prior status. Shared-client assertions do not prove isolation.
+4. No production behavior changed.
+
+## 2. Confirmed by reading this clone
+
+- `src/services/dealRegistrationService.ts` and `snapshots/dealRegistrationService.ts.original.txt` are the reference pair for the unchanged service.
+- `tests/deal-transition-lab.test.mjs` has five `test(...)` calls, at lines 20, 24, 28, 31, and 34. The case at line 28 iterates three refusal tuples.
+- The `attempt` helper (line 9) asserts `client === tx` on every write.
+- `src/repositories/dealRepository.ts:134` updates by `id` only.
+- `src/lib/auth/session.ts:14` defaults to `demo-channel-manager`.
+
+## 3. Never executed, as far as the repo records
+
+- `npm test` (four Vitest files)
+- `next build`, `tsc`, Prisma migration, or seed
+- any HTTP request. The route-level outcomes in chapter 07 come from reading `createAuthedRoute` and `normalizeError`
+- the background job processor
+- concurrent approvals and job claims
+
+## Closing the gaps
+
+1. Re-run the lab and commit the log next to `results.json`.
+2. Add the stale-write conflict case from chapter 03 once the repository uses a conditional update.
+3. Add a provider-backed rollback test: force the audit insert to fail, then verify `DealRegistration.status` is unchanged and no `DealApproval` row exists.
+4. Add a job-claim race test for `processDueJobs`.
